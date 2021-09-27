@@ -85,7 +85,7 @@ func testNew(t *testing.T, aliases Aliases) {
 			drivers.ConfigSchema:    "schema",
 			drivers.ConfigBlacklist: []string{"hangars"},
 		},
-		Imports:   importers.NewDefaultImports(),
+		Imports:   importers.NewDefaultImports(nil),
 		TagIgnore: []string{"pass"},
 		Aliases:   aliases,
 	}

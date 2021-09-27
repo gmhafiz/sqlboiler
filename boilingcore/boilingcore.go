@@ -128,6 +128,9 @@ func New(config *Config) (*State, error) {
 		return nil, errors.Wrap(err, "unable to initialize aliases")
 	}
 
+	if s.Config.AuditTableName == "" {
+		s.Config.AuditTableName = "audits"
+	}
 	return s, nil
 }
 
@@ -160,6 +163,9 @@ func (s *State) Run() error {
 
 		DBTypes:     make(once),
 		StringFuncs: templateStringMappers,
+
+		AuditTableName: s.Config.AuditTableName,
+		AuditEnabled:   s.Config.AuditEnabled,
 	}
 
 	for _, v := range s.Config.TagIgnore {

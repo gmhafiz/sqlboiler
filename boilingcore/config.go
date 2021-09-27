@@ -41,6 +41,9 @@ type Config struct {
 	TypeReplaces []TypeReplace `toml:"type_replaces,omitempty" json:"type_replaces,omitempty"`
 
 	Version string `toml:"version" json:"version"`
+
+	AuditEnabled   bool   `toml:"audit_enabled,omitempty" json:"audit_enabled,omitempty"`
+	AuditTableName string `toml:"audit_table_name,omitempty" json:"audit_table_name,omitempty"`
 }
 
 // TypeReplace replaces a column type with something else

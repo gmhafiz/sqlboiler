@@ -1,5 +1,7 @@
 {{- $alias := .Aliases.Table .Table.Name -}}
 {{- $schemaTable := .Table.Name | .SchemaTable}}
+{{- $colDefs := sqlColDefinitions .Table.Columns .Table.PKey.Columns -}}
+{{- $pkNames := $colDefs.Names | stringMap (aliasCols $alias) | stringMap .StringFuncs.camelCase | stringMap .StringFuncs.replaceReserved -}}
 {{if .AddGlobal -}}
 // UpdateG a single {{$alias.UpSingular}} record using the global executor.
 // See Update for more documentation.
@@ -48,6 +50,14 @@ func (o *{{$alias.UpSingular}}) Update({{if .NoContext}}exec boil.Executor{{else
 	{{- template "timestamp_update_helper" . -}}
 
 	var err error
+
+    {{if  .AuditEnabled}}
+    event, err := o.setUpdateOldValues(ctx, exec)
+    if err != nil {
+        return 0, err
+    }
+    {{end -}}
+
 	{{if not .NoHooks -}}
 	if err = o.doBeforeUpdateHooks({{if not .NoContext}}ctx, {{end -}} exec); err != nil {
 		return {{if not .NoRowsAffected}}0, {{end -}} err
@@ -132,6 +142,17 @@ func (o *{{$alias.UpSingular}}) Update({{if .NoContext}}exec boil.Executor{{else
 		{{$alias.DownSingular}}UpdateCache[key] = cache
 		{{$alias.DownSingular}}UpdateCacheMut.Unlock()
 	}
+
+    {{if  .AuditEnabled}}
+	event, err = o.setUpdateNewValues(event)
+	if err != nil {
+		return 0, err
+	}
+	err = Save(ctx, exec, Insert, event)
+	if err != nil {
+		return 0, err
+	}
+	{{end -}}
 
 	{{if not .NoHooks -}}
 	return {{if not .NoRowsAffected}}rowsAff, {{end -}} o.doAfterUpdateHooks({{if not .NoContext}}ctx, {{end -}} exec)
@@ -305,3 +326,50 @@ func (o {{$alias.UpSingular}}Slice) UpdateAll({{if .NoContext}}exec boil.Executo
 
 	return {{if not .NoRowsAffected}}rowsAff, {{end -}} nil
 }
+
+{{if .AuditEnabled}}
+func (o *{{$alias.UpSingular}}) setUpdateOldValues(ctx context.Context, exec boil.ContextExecutor) (*Event, error) {
+	event, ok := ctx.Value("audit").(Event)
+	if !ok {
+		return nil, ErrNoAuditSet
+	}
+	userID, ok := ctx.Value(UserID).(uint64) // todo: may be a string
+	if !ok {
+		return nil, ErrNoAuditSet
+	}
+
+    current, err := Find{{$alias.UpSingular}}(ctx, exec,
+    {{range .Table.PKey.Columns -}}
+    o.{{$alias.Column .}},
+    {{end -}}
+    )
+    if err != nil {
+        return nil, err
+    }
+
+    marshalled, err := json.Marshal(current)
+    if err != nil {
+        return nil, err
+    }
+
+	event.ActorID = userID
+	event.TableRowID = o.ID
+    event.Table = "{{$alias.DownPlural}}"
+    event.Action = Update
+	event.OldValues = string(marshalled)
+
+	return &event, nil
+}
+
+func (o *{{$alias.UpSingular}}) setUpdateNewValues(event *Event) (*Event, error) {
+	marshalled, err := json.Marshal(o)
+	if err != nil {
+		return nil, err
+	}
+
+	event.NewValues = string(marshalled)
+	event.CreatedAt = time.Now().In(boil.GetLocation())
+
+	return event, nil
+}
+{{end -}}

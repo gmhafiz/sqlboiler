@@ -52,6 +52,13 @@ func (o *{{$alias.UpSingular}}) Delete({{if .NoContext}}exec boil.Executor{{else
 		return {{if not .NoRowsAffected}}0, {{end -}} errors.New("{{.PkgName}}: no {{$alias.UpSingular}} provided for delete")
 	}
 
+	{{if .AuditEnabled -}}
+    event, err := o.setDeleteOldValues(ctx)
+    if err != nil {
+        return 0, err
+    }
+    {{- end}}
+
 	{{if not .NoHooks -}}
 	if err := o.doBeforeDeleteHooks({{if not .NoContext}}ctx, {{end -}} exec); err != nil {
 		return {{if not .NoRowsAffected}}0, {{end -}} err
@@ -121,6 +128,17 @@ func (o *{{$alias.UpSingular}}) Delete({{if .NoContext}}exec boil.Executor{{else
 	}
 
 	{{end -}}
+
+    {{if .AuditEnabled -}}
+    event, err = o.setDeleteNewValues(event)
+    if err != nil {
+        return 0, err
+    }
+    err = Save(ctx, exec, Delete, event)
+    if err != nil {
+        return 0, err
+    }
+    {{- end}}
 
 	{{if not .NoHooks -}}
 	if err := o.doAfterDeleteHooks({{if not .NoContext}}ctx, {{end -}} exec); err != nil {
@@ -339,3 +357,38 @@ func (o {{$alias.UpSingular}}Slice) DeleteAll({{if .NoContext}}exec boil.Executo
 
 	return {{if not .NoRowsAffected}}rowsAff, {{end -}} nil
 }
+
+{{if .AuditEnabled -}}
+func (o *{{$alias.UpSingular}}) setDeleteOldValues(ctx context.Context) (*Event, error) {
+	event, ok := ctx.Value("audit").(Event)
+	if !ok {
+		return nil, ErrNoAuditSet
+	}
+
+	userID, ok := ctx.Value(UserID).(uint64) // may be a string
+	if !ok {
+		return nil, ErrNoAuditSet
+	}
+
+	marshalled, err := json.Marshal(o)
+    if err != nil {
+        return nil, err
+    }
+
+	event.ActorID = userID
+	event.TableRowID = o.ID // can be something else
+    event.Table = "{{$alias.DownPlural}}"
+	event.Action = Delete
+	event.OldValues = string(marshalled)
+
+	return &event, nil
+}
+
+func (o *{{$alias.UpSingular}}) setDeleteNewValues(event *Event) (*Event, error) {
+	event.TableRowID = uint64(o.ID) // todo: get model's primary key.
+	event.NewValues = "{}"
+	event.CreatedAt = time.Now().In(boil.GetLocation())
+
+	return event, nil
+}
+{{end -}}

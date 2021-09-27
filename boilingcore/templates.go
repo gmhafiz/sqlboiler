@@ -68,6 +68,10 @@ type templateData struct {
 
 	// StringFuncs are usable in templates with stringMap
 	StringFuncs map[string]func(string) string
+
+	// AuditTableName defines table name where audit records are saved.
+	AuditTableName string
+	AuditEnabled   bool
 }
 
 func (t templateData) Quotes(s string) string {

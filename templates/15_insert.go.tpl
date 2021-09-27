@@ -40,6 +40,13 @@ func (o *{{$alias.UpSingular}}) Insert({{if .NoContext}}exec boil.Executor{{else
 	var err error
 	{{- template "timestamp_insert_helper" . }}
 
+    {{if .AuditEnabled -}}
+    event, err := o.setInsertOldValues(ctx)
+    if err != nil {
+        return err
+    }
+    {{- end}}
+
 	{{if not .NoHooks -}}
 	if err := o.doBeforeInsertHooks({{if not .NoContext}}ctx, {{end -}} exec); err != nil {
 		return err
@@ -211,9 +218,59 @@ CacheNoHooks:
 		{{$alias.DownSingular}}InsertCacheMut.Unlock()
 	}
 
+    {{if .AuditEnabled -}}
+        {{if .Dialect.UseLastInsertID -}}
+        {{- $canLastInsertID := .Table.CanLastInsertID -}}
+            {{if $canLastInsertID -}}
+    event, err = o.setInsertNewValues(event, lastID)
+            {{else}}
+    event, err = o.setInsertNewValues(event, 0)
+        {{end}}
+    {{end}}
+    if err != nil {
+        return err
+    }
+    err = Save(ctx, exec, Insert, event)
+    if err != nil {
+        return err
+    }
+    {{end -}}
+
 	{{if not .NoHooks -}}
 	return o.doAfterInsertHooks({{if not .NoContext}}ctx, {{end -}} exec)
 	{{- else -}}
 	return nil
 	{{- end}}
 }
+
+{{if .AuditEnabled -}}
+func (o *{{$alias.UpSingular}}) setInsertOldValues(ctx context.Context) (*Event, error) {
+	event, ok := ctx.Value("audit").(Event)
+	if !ok {
+		return nil, ErrNoAuditSet
+	}
+	userID, ok := ctx.Value(UserID).(uint64) // may be a string
+	if !ok {
+		return nil, ErrNoAuditSet
+	}
+	event.ActorID = userID
+	event.OldValues = "{}"
+
+	return &event, nil
+}
+
+func (o *{{$alias.UpSingular}}) setInsertNewValues(event *Event, lastID int64) (*Event, error) {
+    marshalled, err := json.Marshal(o)
+    if err != nil {
+        return nil, err
+    }
+
+	event.TableRowID = uint64(lastID)
+	event.Table = "{{$alias.DownPlural}}"
+	event.Action = Insert
+	event.NewValues = string(marshalled)
+	event.CreatedAt = time.Now().In(boil.GetLocation())
+
+	return event, nil
+}
+{{end -}}

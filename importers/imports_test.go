@@ -197,7 +197,7 @@ func TestAddTypeImports(t *testing.T) {
 		"time.Time",
 	}
 
-	imps := NewDefaultImports()
+	imps := NewDefaultImports(nil)
 
 	imps.BasedOnType = Map{
 		"null.Time": Set{ThirdParty: List{`"github.com/volatiletech/null/v8"`}},

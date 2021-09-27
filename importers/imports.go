@@ -188,7 +188,7 @@ func (l List) Less(i, j int) bool {
 }
 
 // NewDefaultImports returns a default Imports struct.
-func NewDefaultImports() Collection {
+func NewDefaultImports(auditEnabled bool) Collection {
 	var col Collection
 
 	col.All = Set{
@@ -210,6 +210,10 @@ func NewDefaultImports() Collection {
 		},
 	}
 
+	if auditEnabled {
+		col.All.Standard = append(col.All.Standard, `"encoding/json"`)
+	}
+
 	col.Singleton = Map{
 		"boil_queries": {
 			ThirdParty: List{
@@ -226,6 +230,23 @@ func NewDefaultImports() Collection {
 				`"github.com/friendsofgo/errors"`,
 				`"github.com/volatiletech/sqlboiler/v4/boil"`,
 				`"github.com/volatiletech/strmangle"`,
+			},
+		},
+		"audit_helper": {
+			Standard: List{
+				`"context"`,
+				`"fmt"`,
+				`"time"`,
+			},
+			ThirdParty: List{
+				`"github.com/volatiletech/sqlboiler/v4/boil"`,
+				`"github.com/volatiletech/strmangle"`,
+			},
+		},
+		"middleware": {
+			Standard: List{
+				`"context"`,
+				`"net/http"`,
 			},
 		},
 	}

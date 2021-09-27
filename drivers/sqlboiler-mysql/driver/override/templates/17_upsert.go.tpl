@@ -46,6 +46,15 @@ func (o *{{$alias.UpSingular}}) Upsert({{if .NoContext}}exec boil.Executor{{else
 
 	{{- template "timestamp_upsert_helper" . }}
 
+	var err error
+
+{{if .AuditEnabled}}
+	event, err := o.setUpsertOldValues(ctx)
+	if err != nil {
+		return err
+	}
+{{end -}}
+
 	{{if not .NoHooks -}}
 	if err := o.doBeforeUpsertHooks({{if not .NoContext}}ctx, {{end -}} exec); err != nil {
 		return err
@@ -84,8 +93,6 @@ func (o *{{$alias.UpSingular}}) Upsert({{if .NoContext}}exec boil.Executor{{else
 	{{$alias.DownSingular}}UpsertCacheMut.RLock()
 	cache, cached := {{$alias.DownSingular}}UpsertCache[key]
 	{{$alias.DownSingular}}UpsertCacheMut.RUnlock()
-
-	var err error
 
 	if !cached {
 		insert, ret := insertColumns.InsertColumnSet(
@@ -221,9 +228,58 @@ CacheNoHooks:
 		{{$alias.DownSingular}}UpsertCacheMut.Unlock()
 	}
 
+{{if .AuditEnabled}}
+	event, err = o.setUpsertNewValues(event, lastID)
+	if err != nil {
+		return err
+	}
+	err = Save(ctx, exec, Insert, event)
+	if err != nil {
+		return err
+	}
+
 	{{if not .NoHooks -}}
 	return o.doAfterUpsertHooks({{if not .NoContext}}ctx, {{end -}} exec)
 	{{- else -}}
 	return nil
 	{{- end}}
 }
+
+func (o *{{$alias.UpSingular}}) setUpsertNewValues(event *Event) (*Event, error) {
+    event, ok := ctx.Value("audit").(Event)
+    if !ok {
+        return nil, ErrNoAuditSet
+    }
+    userID, ok := ctx.Value(UserID).(uint64) // may be a string
+    if !ok {
+        return nil, ErrNoAuditSet
+    }
+
+    current, err := Find{{$alias.UpSingle}}(ctx, exec, o.ID) // todo: get table's unique column name
+    if err != nil {
+        return nil, err
+    }
+
+	marshalled, err := json.Marshal(o)
+	if err != nil {
+		return nil, err
+	}
+
+	event.NewValues = string(marshalled)
+	event.CreatedAt = time.Now().In(boil.GetLocation())
+
+	return event, nil
+}
+
+func (o *{{$alias.UpSingular}}) setUpsertNewValues(event *Event) (*Event, error) {
+	marshalled, err := json.Marshal(o)
+	if err != nil {
+		return nil, err
+	}
+
+	event.NewValues = string(marshalled)
+	event.CreatedAt = time.Now().In(boil.GetLocation())
+
+	return event, nil
+}
+{{end -}}

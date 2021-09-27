@@ -112,6 +112,9 @@ func main() {
 	rootCmd.PersistentFlags().StringP("relation-tag", "r", "-", "Relationship struct tag name")
 	rootCmd.PersistentFlags().StringSliceP("tag-ignore", "", nil, "List of column names that should have tags values set to '-' (ignored during parsing)")
 
+	rootCmd.PersistentFlags().BoolP("audit-enabled", "", false, "Enable audit")
+	rootCmd.PersistentFlags().StringP("audit-table-name", "", "audit", "Customize name of audit table")
+
 	// hide flags not recommended for use
 	rootCmd.PersistentFlags().MarkHidden("replace")
 
@@ -190,6 +193,9 @@ func preRun(cmd *cobra.Command, args []string) error {
 		Aliases:           boilingcore.ConvertAliases(viper.Get("aliases")),
 		TypeReplaces:      boilingcore.ConvertTypeReplace(viper.Get("types")),
 		Version:           sqlBoilerVersion,
+
+		AuditEnabled: viper.GetBool("audit-enabled"),
+		AuditTableName: viper.GetString("audit-table-name"),
 	}
 
 	if cmdConfig.Debug {
@@ -210,14 +216,14 @@ func preRun(cmd *cobra.Command, args []string) error {
 		}
 	}
 
-	cmdConfig.Imports = configureImports()
+	cmdConfig.Imports = configureImports(cmdConfig.AuditEnabled)
 
 	cmdState, err = boilingcore.New(cmdConfig)
 	return err
 }
 
-func configureImports() importers.Collection {
-	imports := importers.NewDefaultImports()
+func configureImports(auditEnabled bool) importers.Collection {
+	imports := importers.NewDefaultImports(auditEnabled)
 
 	mustMap := func(m importers.Map, err error) importers.Map {
 		if err != nil {
